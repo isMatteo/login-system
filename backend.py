@@ -11,6 +11,7 @@ CORS(app)
 DATABASE_FILE = "users_database.json"
 RESPONSES_FILE = "risposte_centralizzate.json"
 RESPONSES_TXT = "risposte_centralizzate.txt"
+SUPERVISOR_PASSWORD = "Supervisore123!"
 
 # Ottiene la porta da variabili d'ambiente (per Render)
 PORT = int(os.environ.get('PORT', 5000))
@@ -186,6 +187,19 @@ def check_response(username):
     
     return jsonify({'success': True, 'submitted': False}), 200
 
+@app.route('/verify_supervisor', methods=['POST'])
+def verify_supervisor():
+    """Endpoint per verificare la password supervisore"""
+    data = request.get_json()
+    password = data.get('password', '')
+    
+    if password == SUPERVISOR_PASSWORD:
+        all_responses = load_responses()
+        return jsonify({'success': True, 'responses': all_responses}), 200
+    else:
+        return jsonify({'success': False, 'message': 'Password supervisore errata'}), 401
+
 if __name__ == "__main__":
     app.run(debug=False, host='0.0.0.0', port=PORT)
+
 
