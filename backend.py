@@ -9,6 +9,8 @@ CORS(app)
 
 # File onde salvare gli utenti (in produzione usare database vero)
 DATABASE_FILE = "users_database.json"
+RESPONSES_FILE = "risposte_centralizzate.json"
+RESPONSES_TXT = "risposte_centralizzate.txt"
 
 # Ottiene la porta da variabili d'ambiente (per Render)
 PORT = int(os.environ.get('PORT', 5000))
@@ -47,6 +49,39 @@ def validate_password(password):
         return False, "La password deve contenere almeno un carattere speciale"
     
     return True, "Password valida"
+
+def load_responses():
+    """Carica tutte le risposte"""
+    if os.path.exists(RESPONSES_FILE):
+        with open(RESPONSES_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return []
+
+def save_responses(responses):
+    """Salva tutte le risposte"""
+    with open(RESPONSES_FILE, "w", encoding="utf-8") as f:
+        json.dump(responses, f, indent=4, ensure_ascii=False)
+
+def salva_response_txt(responses):
+    """Salva tutte le risposte in un file txt centralizzato"""
+    with open(RESPONSES_TXT, "w", encoding="utf-8") as f:
+        f.write("="*70 + "\n")
+        f.write("RISPOSTE AL QUESTIONARIO - REPORT SUPERVISORE\n")
+        f.write("="*70 + "\n\n")
+        
+        for resp in responses:
+            f.write("-"*70 + "\n")
+            f.write(f"Username: {resp['username']}\n")
+            f.write(f"Nome e Cognome: {resp.get('nome_cognome', 'N/A')}\n")
+            f.write("-"*70 + "\n")
+            
+            for item in resp.get('domande', []):
+                f.write(f"Domanda: {item['domanda']}\n")
+                f.write(f"Risposta: {item['risposta']}\n\n")
+            
+            f.write("\n")
+        
+        f.write("="*70 + "\n")
 
 @app.route('/register', methods=['POST'])
 def register():
@@ -97,5 +132,60 @@ def health():
     """Endpoint per verificare se il server è online"""
     return jsonify({'status': 'online'}), 200
 
+@app.route('/save_responses', methods=['POST'])
+def save_responses_endpoint():
+    """Endpoint per salvare le risposte del questionario"""
+    data = request.get_json()
+    username = data.get('username', '').strip()
+    risposte = data.get('risposte', {})
+    
+    if not username or not risposte:
+        return jsonify({'success': False, 'message': 'Dati incompleti'}), 400
+    
+    # Carica risposte esistenti
+    all_responses = load_responses()
+    
+    # Controlla se l'utente ha già inviato
+    for resp in all_responses:
+        if resp['username'] == username:
+            return jsonify({'success': False, 'message': 'Hai già inviato il questionario'}), 400
+    
+    # Aggiungi la nuova risposta
+    nome_cognome = risposte.get('domande', [])[0].get('risposta', 'Sconosciuto') if risposte.get('domande') else 'Sconosciuto'
+    new_response = {
+        'username': username,
+        'nome_cognome': nome_cognome,
+        'domande': risposte.get('domande', [])
+    }
+    
+    all_responses.append(new_response)
+    
+    # Salva in JSON
+    save_responses(all_responses)
+    
+    # Salva in TXT
+    salva_response_txt(all_responses)
+    
+    return jsonify({'success': True, 'message': 'Risposte salvate con successo'}), 201
+
+@app.route('/get_all_responses', methods=['GET'])
+def get_all_responses():
+    """Endpoint per recuperare tutte le risposte (supervisore)"""
+    # In produzione, aggiungere autenticazione per il supervisore
+    all_responses = load_responses()
+    return jsonify({'success': True, 'responses': all_responses}), 200
+
+@app.route('/check_response/<username>', methods=['GET'])
+def check_response(username):
+    """Endpoint per controllare se un utente ha già inviato"""
+    all_responses = load_responses()
+    
+    for resp in all_responses:
+        if resp['username'] == username:
+            return jsonify({'success': True, 'submitted': True}), 200
+    
+    return jsonify({'success': True, 'submitted': False}), 200
+
 if __name__ == "__main__":
     app.run(debug=False, host='0.0.0.0', port=PORT)
+
